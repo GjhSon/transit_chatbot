@@ -19,7 +19,7 @@ app = FastAPI()
 # 클라이언트 설정 (gemini)
 client = genai.Client()
 
-# DB 연결 
+# DB 연결
 DB_URL = os.getenv("SQLALCHEMY_DATABASE_URL")
 engine = create_engine(DB_URL) 
 
@@ -73,9 +73,9 @@ def extract_userinput_info(user_input: str):
         return {"error": str(e), "status": "fail"}
 
 
-# gemini로부터 3개의 경로에 대한 각각의 우선순위와 추천사유를 얻어 리턴
+# gemini로부터 3개의 경로에 대한 각각의 우선순위와 추천사유를 얻어 리턴 
 def get_ai_recommendation(constraints: str, _3routes_summary: list):  
-    routes_context = ""     
+    routes_context = ""      # routes_context : str
     
     for i, r in enumerate(_3routes_summary):
         routes_context += f"""
@@ -120,7 +120,7 @@ def get_ai_recommendation(constraints: str, _3routes_summary: list):
         )        
         
         clean_json = response.text.replace("```json", "").replace("```", "").strip()
-        return json.loads(clean_json)   
+        return json.loads(clean_json)  
     
     except Exception as e:
         return {"error": str(e), "status": "fail"}
@@ -141,7 +141,7 @@ def request_tmap_route(start_x, start_y, end_x, end_y):
         "lang": 0,
         "format": "json",
         "count": 3,
-        "searchDttm": current_time  
+        "searchDttm": current_time 
     }
     headers = {
         "accept": "application/json",
@@ -152,7 +152,7 @@ def request_tmap_route(start_x, start_y, end_x, end_y):
     try: 
         response = requests.post(url, json=payload, headers=headers)
         
-        if response.status_code == 200:  
+        if response.status_code == 200: 
             return response.json()
         else:
             print(f"에러 발생: {response.status_code}")
@@ -161,8 +161,7 @@ def request_tmap_route(start_x, start_y, end_x, end_y):
     except Exception as e:
         return {"error": str(e), "status": "fail"}
 
-        
-        
+
 
     
 # 각 3개의 경로에 대한 요약정보 추출: 총 소요시간, 총 환승횟수, 도보 거리, 총 요금, 세부 경로
@@ -173,24 +172,31 @@ def extract_route_summary(request_result, request_id):
     try:
         
         itineraries = request_result["metaData"]["plan"]["itineraries"]
-  
+    
 
         _3_routes = []
 
 
         for path in itineraries:
             legs = path.get("legs", [])
-            detail_list = []    
+            detail_list = []  
+
+            step_num = 1  
         
-            for i, leg in enumerate(legs):
+            for leg in legs:
                 mode = leg.get("mode")  # WALK, BUS, SUBWAY 등
                 section_time = max(1, leg.get("sectionTime", 0) // 60) 
                 start_name = leg.get("start", {}).get("name")
                 end_name = leg.get("end", {}).get("name")
             
                 if mode == "WALK":
+
+                    if start_name and end_name and start_name == end_name:
+                        continue
+
                     dist = leg.get("distance", 0)
-                    detail_list.append(f"{i+1}. 도보: '{start_name}'에서 '{end_name}'까지 약 {section_time}분 이동 ({dist}m)")
+                    detail_list.append(f"{step_num}. 도보: '{start_name}'에서 '{end_name}'까지 약 {section_time}분 이동 ({dist}m)")
+                    step_num += 1
 
                 elif mode in ["BUS", "SUBWAY"]:
                     route_name = leg.get("route", "대중교통")
@@ -198,13 +204,15 @@ def extract_route_summary(request_result, request_id):
                     station_count = len(stations) - 1 if stations else 0
                 
                     detail_list.append(
-                        f"{i+1}. {mode}: '{route_name}' 탑승 ('{start_name}' 승차) -> "
+                        f"{step_num}. {mode}: '{route_name}' 탑승 ('{start_name}' 승차) -> "
                         f"'{end_name}'까지 {station_count}개 정류장 이동 (약 {section_time}분)"
-                )
+                    )
+                    step_num += 1
+                
         
             detail_fin = "\n".join(detail_list)
         
-
+ 
 
             result = {
                 "request_id": request_id,
@@ -217,12 +225,11 @@ def extract_route_summary(request_result, request_id):
 
             _3_routes.append(result)
           
-        return _3_routes  
+        return _3_routes
 
     except (KeyError, IndexError) as e:
         return {"error": str(e), "status": "fail"}
         
-
     
 
 @app.post("/api/v1/extract-userinput")  # 자바 서버에서 호출할 엔드포인트: 사용자 입력에서 출발지, 목적지, 주의사항을 추출하여 JSON으로 리턴
@@ -244,8 +251,8 @@ def generate_route_recommendations(request_id: int):
         if not result:
             raise HTTPException(status_code = 404, detail = "request_id를 찾을 수 없습니다.")
 
-    raw_result = request_tmap_route(result.departure_lon, result.departure_lat, result.destination_lon, result.destination_lat) 
-    summaries = extract_route_summary(raw_result, request_id) 
+    raw_result = request_tmap_route(result.departure_lon, result.departure_lat, result.destination_lon, result.destination_lat)
+    summaries = extract_route_summary(raw_result, request_id)
 
     if not summaries:
         return {"status": "fail", "message": "경로를 찾지 못했습니다."}
@@ -264,7 +271,7 @@ def generate_route_recommendations(request_id: int):
     with engine.begin() as conn:  
         for i, s in enumerate(summaries):
             
-            recommendation = next((item for item in ai_recommendations if item.get('path_id') == i+1), None)  # 현재 처리할 경로 id(i+1)와 동일한 id를 가지는 gemini 추천 결과를 가져옴
+            recommendation = next((item for item in ai_recommendations if item.get('path_id') == i+1), None)
             
             if recommendation is None:
                 recommendation = {}

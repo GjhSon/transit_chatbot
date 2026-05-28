@@ -75,7 +75,7 @@ def extract_userinput_info(user_input: str):
 
 # gemini로부터 3개의 경로에 대한 각각의 우선순위와 추천사유를 얻어 리턴 
 def get_ai_recommendation(constraints: str, _3routes_summary: list):  
-    routes_context = ""      # routes_context : str
+    routes_context = "" 
     
     for i, r in enumerate(_3routes_summary):
         routes_context += f"""
